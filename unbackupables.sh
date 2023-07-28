@@ -9,6 +9,9 @@ HEADERS_AUTHORIZATION="Authorization: Bearer $TOKEN"
 #ftp root directory
 FTP_FOLDER="/home/will/docker-composer/ftp_data/"
 
+#if you are using self-signed certificates you might want to enable this(1)
+SELF_SIGNED_CERT=0
+
 #variable for enabling(1) creation of new devices in Unimus
 CREATE_DEVICES=1
 
@@ -38,16 +41,18 @@ process_files() {
 }
 
 create_new_device() {
-curl -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"address": "'"$1"'","description":"apicreated"}'\
+curl $insecure  -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"address": "'"$1"'","description":"apicreated"}'\
  "http://$UNIMUS_ADDRESS/api/v2/devices" > /dev/null
 }
 
 get_device_id() {
-echo "$(curl -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "http://$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$1" | jq .data.id)"
+echo "$(curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "http://$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$1" | jq .data.id)"
 }
 
 create_backup() {
-curl -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"backup": "'"$2"'","type":"'"$3"'"}' "http://$UNIMUS_ADDRESS/api/v2/devices/$1/backups" > /dev/null
+curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"backup": "'"$2"'","type":"'"$3"'"}' "http://$UNIMUS_ADDRESS/api/v2/devices/$1/backups" > /dev/null
 }
+
+[ $SELF_SIGNED_CERT = 1 ] && insecure="-k"
 
 process_files $FTP_FOLDER

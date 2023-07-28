@@ -2,9 +2,10 @@
 #parametric variables
 $UNIMUS_ADDRESS = "172.17.0.1:8085"
 $TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJhdXRoMCJ9.Ko3FEfroI2hwNT-8M-8Us38gqwzmHHxypM7nWCqU2JA"
-
 $FTPFOLDER = "/ftp_data/"
 
+#Set this $TRUE if you are using self-signed certs
+$INSECURE = $TRUE
 #Variable controlling creation of new devices in Unimus; 1 = create
 $CREATE_DEVICES = 1
 
@@ -59,8 +60,11 @@ function Create-NewDevice {
         "Content-Type" = "application/json"
         "Authorization" = "Bearer $TOKEN"
     }
-
-    Invoke-RestMethod -Uri "http://$UNIMUS_ADDRESS/api/v2/devices" -Method POST -Headers $headers -Body $body | Out-Null
+    if ($INSECURE) {
+        Invoke-RestMethod -SkipCertificateCheck -Uri "http://$UNIMUS_ADDRESS/api/v2/devices" -Method POST -Headers $headers -Body $body | Out-Null
+    } else {
+        Invoke-RestMethod -Uri "http://$UNIMUS_ADDRESS/api/v2/devices" -Method POST -Headers $headers -Body $body | Out-Null
+    }
 }
 
 function Get-DeviceId {
@@ -73,7 +77,11 @@ function Get-DeviceId {
         "Authorization" = "Bearer $TOKEN"
     }
     try {
-        $response = Invoke-RestMethod -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$address" -Method GET -Headers $headers
+        if ($INSECURE) {
+            $response = Invoke-RestMethod -SkipCertificateCheck -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$address" -Method GET -Headers $headers
+        } else {
+            $response = Invoke-RestMethod -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$address" -Method GET -Headers $headers
+        }
         return $response.data.id
     }
     catch {
@@ -105,8 +113,11 @@ function Create-Backup {
         "Content-Type" = "application/json"
         "Authorization" = "Bearer $TOKEN"
     }
-
-    Invoke-RestMethod -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
+    if ($INSECURE) {
+        Invoke-RestMethod -SkipCertificateCheck -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
+    } else {
+        Invoke-RestMethod -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
+    }
 }
 
 Process-Files -directory $FTPFOLDER
