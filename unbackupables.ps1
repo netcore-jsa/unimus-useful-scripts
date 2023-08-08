@@ -1,13 +1,17 @@
 #PowerShell script that extracts the names of subdirectories within a specified directory:
-#parametric variables
-$UNIMUS_ADDRESS = "172.17.0.1:8085"
-$TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJhdXRoMCJ9.Ko3FEfroI2hwNT-8M-8Us38gqwzmHHxypM7nWCqU2JA"
-$FTPFOLDER = "/ftp_data/"
+#mandatory parameters
+$UNIMUS_ADDRESS = "http://172.17.0.1:8085"
+$TOKEN = "<api token>"
+$FTPFOLDER = "/ftp_data"
+#C:\Users\unimus\Documents\ftp_data\
 
-#Set this $TRUE if you are using self-signed certs
-$INSECURE = $TRUE
-#Variable controlling creation of new devices in Unimus; 1 = create
-$CREATE_DEVICES = 1
+#optional parameters
+#Which Zone in Unimus are you working on; CAPS sensitive; comment if default
+$ZONE="ES1"
+#Uncomment this if you are using self-signed certs
+#$INSECURE = "very"
+#Variable controlling creation of new devices in Unimus; comment to disable
+$CREATE_DEVICES = "yespls"
 
 function Process-Files {
     param(
@@ -18,13 +22,12 @@ function Process-Files {
     foreach ($subdir in $subdirs) {
         $address = $subdir.Name
         $id = "null"; $id = Get-DeviceId $address
-        #Write-Host "`nDEVICE ID IS: $id"
-
-        if ($id -eq "null" -and $CREATE_DEVICES -eq 1) {
+        Write-Host "`nafter first DEVICE ID IS: $id"
+        if ($id -eq "null" -and $CREATE_DEVICES) {
             Create-NewDevice $address
             $id = Get-DeviceId $address
         }
-        #Write-Host "`nDEVICE ID IS: $id"
+        Write-Host "`nDEVICE ID IS: $id"
         $files = Get-ChildItem -Path $subdir.FullName | Sort-Object -Property LastWriteTime -Descending
         foreach ($file in $files) {
             if ($file.GetType() -eq [System.IO.FileInfo]) {
@@ -53,17 +56,23 @@ function Create-NewDevice {
     $body = @{
         address = $address
         description = "apicreated"
-    } | ConvertTo-Json
+    }
+
+    if ($ZONE) {
+        $body["zoneId"] = $ZONE
+    }
+
+    $body = $body | ConvertTo-Json
 
     $headers = @{
         "Accept" = "application/json"
         "Content-Type" = "application/json"
         "Authorization" = "Bearer $TOKEN"
     }
-    if ($INSECURE) {
-        Invoke-RestMethod -SkipCertificateCheck -Uri "http://$UNIMUS_ADDRESS/api/v2/devices" -Method POST -Headers $headers -Body $body | Out-Null
+    if ($INSECURE -and $psMajorVersion -ge 6) {
+        Invoke-RestMethod -SkipCertificateCheck -Uri "$UNIMUS_ADDRESS/api/v2/devices" -Method POST -Headers $headers -Body $body | Out-Null
     } else {
-        Invoke-RestMethod -Uri "http://$UNIMUS_ADDRESS/api/v2/devices" -Method POST -Headers $headers -Body $body | Out-Null
+        Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/api/v2/devices" -Method POST -Headers $headers -Body $body | Out-Null
     }
 }
 
@@ -76,11 +85,19 @@ function Get-DeviceId {
         "Accept" = "application/json"
         "Authorization" = "Bearer $TOKEN"
     }
+
+    if ($ZONE) {
+        $uri="api/v2/devices/findByAddress/" + $address + "?zoneId=" + $ZONE
+    } else {
+        $uri="api/v2/devices/findByAddress/" + $address
+    }
+
     try {
-        if ($INSECURE) {
-            $response = Invoke-RestMethod -SkipCertificateCheck -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$address" -Method GET -Headers $headers
+        if ($INSECURE -and $psMajorVersion -ge 6) {
+            Write-Host "doing NEWER version cert validation skip"
+            $response = Invoke-RestMethod -SkipCertificateCheck -Uri "$UNIMUS_ADDRESS/$uri" -Method GET -Headers $headers
         } else {
-            $response = Invoke-RestMethod -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$address" -Method GET -Headers $headers
+            $response = Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/$uri" -Method GET -Headers $headers
         }
         return $response.data.id
     }
@@ -113,11 +130,33 @@ function Create-Backup {
         "Content-Type" = "application/json"
         "Authorization" = "Bearer $TOKEN"
     }
-    if ($INSECURE) {
-        Invoke-RestMethod -SkipCertificateCheck -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
+    if ($INSECURE -and $psMajorVersion -ge 6) {
+        Invoke-RestMethod -SkipCertificateCheck -Uri "$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
     } else {
-        Invoke-RestMethod -Uri "http://$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
+        Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
     }
+}
+
+$psMajorVersion = $PSVersionTable.PSVersion.Major
+
+if ($INSECURE -and $psMajorVersion -le 5) {
+    Write-Host "doing OLDER version cert validation skip"
+    Add-Type @"
+    using System.Net;
+    using System.Security.Cryptography.X509Certificates;
+    public class TrustAllCertsPolicy : ICertificatePolicy {
+        public bool CheckValidationResult(
+        ServicePoint srvPoint, X509Certificate certificate,
+        WebRequest request, int certificateProblem) {
+            return true;
+        }
+    }
+"@
+    [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
+
+    # Set Tls versions
+    $allProtocols = [System.Net.SecurityProtocolType]'Ssl3,Tls,Tls11,Tls12'
+    [System.Net.ServicePointManager]::SecurityProtocol = $allProtocols
 }
 
 Process-Files -directory $FTPFOLDER
