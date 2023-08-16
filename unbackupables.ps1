@@ -1,7 +1,7 @@
 #PowerShell script that extracts the names of subdirectories within a specified directory:
 #mandatory parameters
 $UNIMUS_ADDRESS = "http://172.17.0.1:8085"
-$TOKEN = "<api token>"
+$TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJhdXRoMCJ9.Ko3FEfroI2hwNT-8M-8Us38gqwzmHHxypM7nWCqU2JA"
 $FTPFOLDER = "/ftp_data"
 #C:\Users\unimus\Documents\ftp_data\
 
@@ -18,34 +18,41 @@ function Process-Files {
         [string]$directory
     )
 
-    $subdirs = Get-ChildItem -Path $directory -Directory
-    foreach ($subdir in $subdirs) {
-        $address = $subdir.Name
-        $id = "null"; $id = Get-DeviceId $address
-        Write-Host "`nafter first DEVICE ID IS: $id"
-        if ($id -eq "null" -and $CREATE_DEVICES) {
-            Create-NewDevice $address
-            $id = Get-DeviceId $address
-        }
-        Write-Host "`nDEVICE ID IS: $id"
-        $files = Get-ChildItem -Path $subdir.FullName | Sort-Object -Property LastWriteTime -Descending
-        foreach ($file in $files) {
-            if ($file.GetType() -eq [System.IO.FileInfo]) {
-                #Write-Host "Processing file: $($file.Name)"
-                $encodedBackup = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($file.Fullname))
-                $content = Get-Content -Path $file.FullName -Raw
-                if ($content -match "[^\x00-\x7F]") {
-                    Create-Backup $id $encodedBackup "BINARY"
-                    #Write-Host "`nCreated BINARY backup"
-                    Remove-Item $file.FullName
-                } else {
-                    Create-Backup $id $encodedBackup "TEXT"
-                    #Write-Host "`nCreated TEXT backup"
-                    Remove-Item $file.FullName
+    #Health check
+    $status = Health-Check
+    if ($status -eq 'OK') {
+        $subdirs = Get-ChildItem -Path $directory -Directory
+        foreach ($subdir in $subdirs) {
+            $address = $subdir.Name
+            $id = "null"; $id = Get-DeviceId $address
+            Write-Host "`nafter first DEVICE ID IS: $id"
+            if ($id -eq "null" -and $CREATE_DEVICES) {
+                Create-NewDevice $address
+                $id = Get-DeviceId $address
+            }
+            Write-Host "`nDEVICE ID IS: $id"
+            $files = Get-ChildItem -Path $subdir.FullName | Sort-Object -Property LastWriteTime -Descending
+            foreach ($file in $files) {
+                if ($file.GetType() -eq [System.IO.FileInfo]) {
+                    #Write-Host "Processing file: $($file.Name)"
+                    $encodedBackup = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($file.Fullname))
+                    $content = Get-Content -Path $file.FullName -Raw
+                    if ($content -match "[^\x00-\x7F]") {
+                        Create-Backup $id $encodedBackup "BINARY"
+                        #Write-Host "`nCreated BINARY backup"
+                        Remove-Item $file.FullName
+                    } else {
+                        Create-Backup $id $encodedBackup "TEXT"
+                        #Write-Host "`nCreated TEXT backup"
+                        Remove-Item $file.FullName
+                    }
                 }
             }
         }
+    } else {
+        Write-Host "Unimus server status: $status"
     }
+    Write-Host "Script finished."
 }
 
 function Create-NewDevice {
@@ -88,6 +95,7 @@ function Get-DeviceId {
 
     if ($ZONE) {
         $uri="api/v2/devices/findByAddress/" + $address + "?zoneId=" + $ZONE
+        Write-Host $uri
     } else {
         $uri="api/v2/devices/findByAddress/" + $address
     }
@@ -98,6 +106,7 @@ function Get-DeviceId {
             $response = Invoke-RestMethod -SkipCertificateCheck -Uri "$UNIMUS_ADDRESS/$uri" -Method GET -Headers $headers
         } else {
             $response = Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/$uri" -Method GET -Headers $headers
+            Write-Host "get device id:$response.data.id"
         }
         return $response.data.id
     }
@@ -105,10 +114,6 @@ function Get-DeviceId {
         if ($_.Exception.Response.StatusCode -eq 404) {
             #Write-Host "Device with address $address not found."
             return "null"
-        }
-        else {
-            #Write-Host "An error occurred: $($_.Exception.Message)"
-            return $null
         }
     }
 }
@@ -134,6 +139,26 @@ function Create-Backup {
         Invoke-RestMethod -SkipCertificateCheck -Uri "$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
     } else {
         Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
+    }
+}
+
+function Health-Check {
+    $headers = @{
+        "Accept" = "application/json"
+        "Authorization" = "Bearer $TOKEN"
+    }
+
+    try {
+        if ($INSECURE -and $psMajorVersion -ge 6) {
+            $response = Invoke-RestMethod -SkipCertificateCheck -Uri "$UNIMUS_ADDRESS/api/v2/health" -Method GET -Headers $headers
+        } else {
+            $response = Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/api/v2/health" -Method GET -Headers $headers
+        }
+        return $response.data.status
+    }
+    catch {
+        Write-Host "Unimus health check failed. Error: $($_.Exception.Message)"
+        Exit
     }
 }
 
