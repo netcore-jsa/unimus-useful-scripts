@@ -17,42 +17,44 @@ function Process-Files {
     param(
         [string]$directory
     )
-
+    $log = "unbackupablesPS.log"
     #Health check
     $status = Health-Check
+    Zone-Check
     if ($status -eq 'OK') {
+        $logMessage = "Log File - " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+        Add-Content -Path $log -Value $logMessage
+        Print-Green "Checks OK. Script starting..."
         $subdirs = Get-ChildItem -Path $directory -Directory
         foreach ($subdir in $subdirs) {
             $address = $subdir.Name
             $id = "null"; $id = Get-DeviceId $address
-            Write-Host "`nafter first DEVICE ID IS: $id"
             if ($id -eq "null" -and $CREATE_DEVICES) {
                 Create-NewDevice $address
+                Print-Green "Device with address $address not found in ZONE $ZONE, creating..."
                 $id = Get-DeviceId $address
             }
-            Write-Host "`nDEVICE ID IS: $id"
             $files = Get-ChildItem -Path $subdir.FullName | Sort-Object -Property LastWriteTime -Descending
             foreach ($file in $files) {
                 if ($file.GetType() -eq [System.IO.FileInfo]) {
-                    #Write-Host "Processing file: $($file.Name)"
                     $encodedBackup = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($file.Fullname))
                     $content = Get-Content -Path $file.FullName -Raw
                     if ($content -match "[^\x00-\x7F]") {
                         Create-Backup $id $encodedBackup "BINARY"
-                        #Write-Host "`nCreated BINARY backup"
+                        Print-Green ("Pushed BINARY backup for device " + $address + " from file " + $($file.Name))
                         Remove-Item $file.FullName
                     } else {
                         Create-Backup $id $encodedBackup "TEXT"
-                        #Write-Host "`nCreated TEXT backup"
+                        Print-Green ("Pushed TEXT backup for device " + $address + " from file " + $($file.Name))
                         Remove-Item $file.FullName
                     }
                 }
             }
         }
     } else {
-        Write-Host "Unimus server status: $status"
+        Print-Red "Unimus server status: $status"
     }
-    Write-Host "Script finished."
+    Print-Green "Script finished."
 }
 
 function Create-NewDevice {
@@ -95,24 +97,20 @@ function Get-DeviceId {
 
     if ($ZONE) {
         $uri="api/v2/devices/findByAddress/" + $address + "?zoneId=" + $ZONE
-        Write-Host $uri
     } else {
         $uri="api/v2/devices/findByAddress/" + $address
     }
 
     try {
         if ($INSECURE -and $psMajorVersion -ge 6) {
-            Write-Host "doing NEWER version cert validation skip"
             $response = Invoke-RestMethod -SkipCertificateCheck -Uri "$UNIMUS_ADDRESS/$uri" -Method GET -Headers $headers
         } else {
             $response = Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/$uri" -Method GET -Headers $headers
-            Write-Host "get device id:$response.data.id"
         }
         return $response.data.id
     }
     catch {
         if ($_.Exception.Response.StatusCode -eq 404) {
-            #Write-Host "Device with address $address not found."
             return "null"
         }
     }
@@ -142,6 +140,26 @@ function Create-Backup {
     }
 }
 
+function Print-Green {
+    param(
+        [string]$logged_text
+    )
+    $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $output = $currentDateTime + " " + $logged_text
+    Add-Content -Path $log -Value $output
+    Write-Host $output -ForegroundColor Green
+}
+
+function Print-Red {
+    param(
+        [string]$logged_text
+    )
+    $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $output = "Error: " + $currentDateTime + " " + $logged_text
+    Add-Content -Path $log -Value $output
+    Write-Host $output -ForegroundColor Red
+}
+
 function Health-Check {
     $headers = @{
         "Accept" = "application/json"
@@ -157,10 +175,33 @@ function Health-Check {
         return $response.data.status
     }
     catch {
-        Write-Host "Unimus health check failed. Error: $($_.Exception.Message)"
+        Print-Red "Unimus health check failed. Error: $($_.Exception.Message)"
         Exit
     }
 }
+
+function Zone-Check {
+    $headers = @{
+        "Accept" = "application/json"
+        "Authorization" = "Bearer $TOKEN"
+    }
+
+    $response = Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/api/v3/zones" -Method GET -Headers $headers
+    $zoneIDs = ($response.zones | ForEach-Object { $_.number })
+
+    $zoneFound = $false
+    foreach ($ID in $zoneIDs) {
+        if ($ID -eq $ZONE) {
+            $zoneFound = $true
+        }
+    }
+
+    if (-not $zoneFound) {
+        Print-Red "Error. Zone $ZONE not found!" -ForegroundColor Red
+        exit
+    }
+}
+
 
 $psMajorVersion = $PSVersionTable.PSVersion.Major
 

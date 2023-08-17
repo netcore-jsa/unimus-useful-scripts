@@ -10,41 +10,39 @@ FTP_FOLDER="/home/will/docker-composer/ftp_data/"
 
 #optional parameters
 #which zone in Unimus to add backups to; CASE SENSITIVE; comment for default
-ZONE="b1"
+ZONE="ES1"
 #if you are using self-signed certificates you might want to uncomment this
 #SELF_SIGNED_CERT="si_senor"
 #variable for enabling creation of new devices in Unimus, comment to disable
 CREATE_DEVICES="yessir"
 
 function process_files() {
-# Set script directory and working dir for script
-script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 # Creating a log file
-log="$script_dir/unbackupables.log"
+log="unbackupables.log"
 printf 'Log File - ' >> $log
 date +"%F %H:%M:%S" >> $log
 #insecure curl switch
 [ -n "$SELF_SIGNED_CERT" ] && insecure="-k"
-status=$(health_check)
+status=$(healthCheck)
 errorCheck "$?" 'Status check failed'
 zoneCheck
 if [ $status == 'OK' ]; then
+    echoGreen 'Checks OK. Script starting...'
     local directory="$1"
     for subdir in "$directory"/*; do
         if [ -d "$subdir" ]; then
             address=$(basename "$subdir")
-            id=$(get_device_id "$address") && echo "device id is:$id"
-            [ $id = "null" ] && [ -n "$CREATE_DEVICES" ] && create_new_device "$address" && id=$(get_device_id "$address") && echoGreen "new device in ZONE:$ZONE added. address:$address,id:$id"
+            id=$(getDeviceId "$address")
+            [ $id = "null" ] && [ -n "$CREATE_DEVICES" ] && createNewDevice "$address" && id=$(getDeviceId "$address") && echoGreen "new device in ZONE:$ZONE added. address:$address,id:$id"
             for file in $(ls -tr "$subdir"); do
-                #echo -e "\nCurrent file: " $file
                 if [ -f "$subdir/$file" ]; then
                     encoded_backup=$(base64 -w 0 "$subdir/$file")
                     isTextFile=$(file -b "$subdir/$file")
                     if [[ $isTextFile == *"text"* ]]; then
-                        create_backup "$id" "$encoded_backup" "TEXT" && echoGreen "created TEXT backup for device $address from file $file" && rm "$subdir/$file"
+                        createBackup "$id" "$encoded_backup" "TEXT" && echoGreen "pushed TEXT backup for device $address from file $file" && rm "$subdir/$file"
                         sleep 1
                     else
-                        create_backup "$id" "$encoded_backup" "BINARY" && echoGreen "created BINARY backup for device $address from file $file" && rm "$subdir/$file"
+                        createBackup "$id" "$encoded_backup" "BINARY" && echoGreen "pushed BINARY backup for device $address from file $file" && rm "$subdir/$file"
                         sleep 1
                     fi
                 fi
@@ -62,7 +60,7 @@ fi
 echoGreen 'Script finished'
 }
 
-function create_new_device() {
+function createNewDevice() {
 if [ -z "$ZONE" ]; then
     curl $insecure  -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"address": "'"$1"'","description":"apicreated"}'\
     "$UNIMUS_ADDRESS/api/v2/devices" > /dev/null
@@ -72,7 +70,7 @@ else
 fi
 }
 
-function get_device_id() {
+function getDeviceId() {
 if [ -z "$ZONE" ]; then
     echo "$(curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$1" | jq .data.id)"
 else
@@ -80,7 +78,7 @@ else
 fi
 }
 
-function create_backup() {
+function createBackup() {
     curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"backup": "'"$2"'","type":"'"$3"'"}' "$UNIMUS_ADDRESS/api/v2/devices/$1/backups" > /dev/null
 }
 
@@ -106,14 +104,14 @@ function errorCheck(){
 }
 function zoneCheck(){
     local response=$(curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v3/zones")
-    zoneIDs=$(echo "$response" | jq -r '.zones[].number')
+    local zoneIDs=$(jq -r '.zones[].number' <<< $response)
     for ID in $zoneIDs; do
         [ $ID = $ZONE ] && local zoneFound=1
     done
-    [ -z $zoneFound ] && echoRed "Error. Zone not found!" && exit
+    [ -z $zoneFound ] && echoRed "Error. Zone $ZONE not found!" && exit
 }
 
-function health_check(){
+function healthCheck(){
     local response=$(curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v2/health")
 	local status=$(jq -r '.data.status' <<< $response)
 	errorCheck "$?" 'Unable to perform Unimus Health Check'
