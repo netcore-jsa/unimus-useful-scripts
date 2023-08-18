@@ -1,29 +1,32 @@
 #PowerShell script that extracts the names of subdirectories within a specified directory:
 #mandatory parameters
-$UNIMUS_ADDRESS = "http://172.17.0.1:8085"
-$TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJhdXRoMCJ9.Ko3FEfroI2hwNT-8M-8Us38gqwzmHHxypM7nWCqU2JA"
+$UNIMUS_ADDRESS = "http(s)://your.unimus.address:(port)"
+$TOKEN = "<api token>"
 $FTPFOLDER = "/ftp_data"
 #C:\Users\unimus\Documents\ftp_data\
 
 #optional parameters
 #Which Zone in Unimus are you working on; CAPS sensitive; comment if default
-$ZONE="ES1"
+$ZONE="6"
 #Uncomment this if you are using self-signed certs
-#$INSECURE = "very"
+$INSECURE = "very"
 #Variable controlling creation of new devices in Unimus; comment to disable
 $CREATE_DEVICES = "yespls"
+$CREATED_DESC = "unbackupable"
 
 function Process-Files {
     param(
         [string]$directory
     )
     $log = "unbackupablesPS.log"
+    $logMessage = "Log File - " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+    Add-Content -Path $log -Value $logMessage
     #Health check
     $status = Health-Check
-    Zone-Check
     if ($status -eq 'OK') {
-        $logMessage = "Log File - " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
-        Add-Content -Path $log -Value $logMessage
+        if ($ZONE) {
+            Zone-Check
+        }
         Print-Green "Checks OK. Script starting..."
         $subdirs = Get-ChildItem -Path $directory -Directory
         foreach ($subdir in $subdirs) {
@@ -31,22 +34,26 @@ function Process-Files {
             $id = "null"; $id = Get-DeviceId $address
             if ($id -eq "null" -and $CREATE_DEVICES) {
                 Create-NewDevice $address
-                Print-Green "Device with address $address not found in ZONE $ZONE, creating..."
+                Print-Green "Device with address $address not found, creating..."
                 $id = Get-DeviceId $address
             }
-            $files = Get-ChildItem -Path $subdir.FullName | Sort-Object -Property LastWriteTime -Descending
-            foreach ($file in $files) {
-                if ($file.GetType() -eq [System.IO.FileInfo]) {
-                    $encodedBackup = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($file.Fullname))
-                    $content = Get-Content -Path $file.FullName -Raw
-                    if ($content -match "[^\x00-\x7F]") {
-                        Create-Backup $id $encodedBackup "BINARY"
-                        Print-Green ("Pushed BINARY backup for device " + $address + " from file " + $($file.Name))
-                        Remove-Item $file.FullName
-                    } else {
-                        Create-Backup $id $encodedBackup "TEXT"
-                        Print-Green ("Pushed TEXT backup for device " + $address + " from file " + $($file.Name))
-                        Remove-Item $file.FullName
+            if ($id -eq "null") {
+                Print-Red "Device $address not found on Unimus. Try to enable creating devices?"
+            } else {
+                $files = Get-ChildItem -Path $subdir.FullName | Sort-Object -Property LastWriteTime -Descending
+                foreach ($file in $files) {
+                    if ($file.GetType() -eq [System.IO.FileInfo]) {
+                        $encodedBackup = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($file.Fullname))
+                        $content = Get-Content -Path $file.FullName -Raw
+                        if ($content -match "[^\x00-\x7F]") {
+                            Create-Backup $id $encodedBackup "BINARY"
+                            Print-Green ("Pushed BINARY backup for device " + $address + " from file " + $($file.Name))
+                            Remove-Item $file.FullName
+                        } else {
+                            Create-Backup $id $encodedBackup "TEXT"
+                            Print-Green ("Pushed TEXT backup for device " + $address + " from file " + $($file.Name))
+                            Remove-Item $file.FullName
+                        }
                     }
                 }
             }
@@ -64,7 +71,7 @@ function Create-NewDevice {
 
     $body = @{
         address = $address
-        description = "apicreated"
+        description = $CREATED_DESC
     }
 
     if ($ZONE) {
@@ -147,7 +154,7 @@ function Print-Green {
     $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $output = $currentDateTime + " " + $logged_text
     Add-Content -Path $log -Value $output
-    Write-Host $output -ForegroundColor Green
+    Write-Host $logged_text -ForegroundColor Green
 }
 
 function Print-Red {
@@ -157,7 +164,7 @@ function Print-Red {
     $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
     $output = "Error: " + $currentDateTime + " " + $logged_text
     Add-Content -Path $log -Value $output
-    Write-Host $output -ForegroundColor Red
+    Write-Host $logged_text -ForegroundColor Red
 }
 
 function Health-Check {
@@ -186,7 +193,11 @@ function Zone-Check {
         "Authorization" = "Bearer $TOKEN"
     }
 
-    $response = Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/api/v3/zones" -Method GET -Headers $headers
+    if ($INSECURE -and $psMajorVersion -ge 6) {
+        $response = Invoke-RestMethod -SkipCertificateCheck -Uri "$UNIMUS_ADDRESS/api/v3/zones" -Method GET -Headers $headers
+    } else {
+        $response = Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/api/v3/zones" -Method GET -Headers $headers
+    }
     $zoneIDs = ($response.zones | ForEach-Object { $_.number })
 
     $zoneFound = $false
@@ -201,7 +212,6 @@ function Zone-Check {
         exit
     }
 }
-
 
 $psMajorVersion = $PSVersionTable.PSVersion.Major
 
