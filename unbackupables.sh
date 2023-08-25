@@ -1,4 +1,5 @@
 #!/bin/bash
+# This script is for pushing config backups from local directory to Unimus
 # !!! The script works for Unimus v2.4.0 beta 3 onwards !!!
 # Mandatory parameters
 UNIMUS_ADDRESS="http://172.17.0.1:8085"
@@ -12,7 +13,7 @@ FTP_FOLDER="/home/will/docker-composer/ftp_data/"
 # Optional parameters
 # Specifies the Zone where devices will be searched for by address/hostname
 # CASE SENSITIVE; leave commented to use the Default (0) zone
-ZONE="ES1"
+ZONE="ESS1"
 # Insecure mode
 # If you are using self-signed certificates you might want to uncomment this
 #SELF_SIGNED_CERT=true
@@ -71,7 +72,7 @@ function process_files() {
 EOF
                             # Use jq to process the JSON from the temporary file
                             jq '.' "$temp_json_file" > output.json
-                            createBackup "$id" "output.json" && echoGreen "Pushed $bkp_type backup for device $address from file $file" #&& rm "$subdir/$file"
+                            createBackup "$id" "output.json" && echoGreen "Pushed $bkp_type backup for device $address from file $file" && rm "$subdir/$file"
                             sleep 1
                             # Clean up the temporary files
                             rm "$temp_json_file" output.json
@@ -110,7 +111,7 @@ function zoneCheck() {
     for ID in $zoneIDs; do
         [ $ID = $ZONE ] && local zoneFound=1
     done
-    [ -z $zoneFound ] && echoRed "Error. Zone $ZONE not found!" && exit
+    [ -z $zoneFound ] && echoRed "Zone $ZONE not found!" && exit
 }
 
 function echoGreen() {
