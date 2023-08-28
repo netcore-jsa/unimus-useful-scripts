@@ -1,7 +1,8 @@
 # This script is for pushing config backups from local directory to Unimus
+# !!! The script works for Unimus v2.4.0 beta 3 onwards !!!
 # Mandatory parameters
-$UNIMUS_ADDRESS = "http://172.17.0.1:8085"
-$TOKEN = "eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJhdXRoMCJ9.Ko3FEfroI2hwNT-8M-8Us38gqwzmHHxypM7nWCqU2JA"
+$UNIMUS_ADDRESS = "<http(s)://unimus.server.address:(port)>"
+$TOKEN = "<api token>"
 $FTP_FOLDER = "/ftp_data"
 #C:\Users\unimus\Documents\ftp_data\
 
@@ -11,9 +12,9 @@ $FTP_FOLDER = "/ftp_data"
 $ZONE="ES1"
 # Insecure mode
 # If you are using self-signed certificates you might want to uncomment this
-$INSECURE = true
+$INSECURE = $true
 # Variable for enabling creation of new devices in Unimus; comment to disable
-#$CREATE_DEVICES = true
+$CREATE_DEVICES = $true
 # Specify description of new devices created in Unimus by the script
 $CREATED_DESC = "Unbackupable"
 
@@ -22,7 +23,7 @@ function Process-Files {
         [string]$directory
     )
 
-    $log = "unbackupablesPS.log"
+    $log = Join-Path $PSScriptRoot "unbackupablesPS.log"
     $logMessage = "Log File - " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
     Add-Content -Path $log -Value $logMessage
     #Health check
@@ -35,15 +36,16 @@ function Process-Files {
         }
 
         Print-Green "Checks OK. Script starting..."
-        $subdirs = Get-ChildItem -Path $directory -Directory
-        foreach ($subdir in $subdirs) {
+        $ftpSubdirs = Get-ChildItem -Path $directory -Directory
+        foreach ($subdir in $ftpSubdirs) {
             $address = $subdir.Name
+            # Check if device already exists in Unimus
             $id = "null"; $id = Get-DeviceId $address
-
+            Write-Host "THis is ID:" + $id + ". OK."
             if ($id -eq "null" -and $CREATE_DEVICES) {
                 Create-NewDevice $address
-                Print-Green ("New device added. Address: " + $address + ", id: " + $id)
                 $id = Get-DeviceId $address
+                Print-Green ("New device added. Address: " + $address + ", id: " + $id)
             }
 
             if ($id -eq "null" -or $id -eq $null) {
@@ -122,6 +124,38 @@ function Zone-Check {
         Print-Red "Error. Zone $ZONE not found!" -ForegroundColor Red
         exit
     }
+}
+
+function Print-Green {
+    param(
+        [string]$logged_text
+    )
+    $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $output = $currentDateTime + " " + $logged_text
+    Add-Content -Path $log -Value $output
+    Write-Host $logged_text -ForegroundColor Green
+}
+
+function Print-Yellow {
+    param(
+        [string]$logged_text
+    )
+    $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $output = "Warning: " + $currentDateTime + " " + $logged_text
+    Add-Content -Path $log -Value $output
+    $output = "Warning: " + $logged_text
+    Write-Host $output -ForegroundColor Yellow
+}
+
+function Print-Red {
+    param(
+        [string]$logged_text
+    )
+    $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $output = "Error: " + $currentDateTime + " " + $logged_text
+    Add-Content -Path $log -Value $output
+    $output = "Error: " + $logged_text
+    Write-Host $output -ForegroundColor Red
 }
 
 function Get-DeviceId {
@@ -206,38 +240,6 @@ function Create-Backup {
     } else {
         Invoke-RestMethod -Uri "$UNIMUS_ADDRESS/api/v2/devices/$id/backups" -Method POST -Headers $headers -Body $body | Out-Null
     }
-}
-
-function Print-Green {
-    param(
-        [string]$logged_text
-    )
-    $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $output = $currentDateTime + " " + $logged_text
-    Add-Content -Path $log -Value $output
-    Write-Host $logged_text -ForegroundColor Green
-}
-
-function Print-Yellow {
-    param(
-        [string]$logged_text
-    )
-    $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $output = "Warning: " + $currentDateTime + " " + $logged_text
-    Add-Content -Path $log -Value $output
-    $output = "Warning: " + $logged_text
-    Write-Host $output -ForegroundColor Yellow
-}
-
-function Print-Red {
-    param(
-        [string]$logged_text
-    )
-    $currentDateTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
-    $output = "Error: " + $currentDateTime + " " + $logged_text
-    Add-Content -Path $log -Value $output
-    $output = "Error: " + $logged_text
-    Write-Host $output -ForegroundColor Red
 }
 
 $psMajorVersion = $PSVersionTable.PSVersion.Major

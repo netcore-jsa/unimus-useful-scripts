@@ -2,18 +2,18 @@
 # This script is for pushing config backups from local directory to Unimus
 # !!! The script works for Unimus v2.4.0 beta 3 onwards !!!
 # Mandatory parameters
-UNIMUS_ADDRESS="http://172.17.0.1:8085"
-TOKEN="eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJhdXRoMCJ9.Ko3FEfroI2hwNT-8M-8Us38gqwzmHHxypM7nWCqU2JA"
+UNIMUS_ADDRESS="<http(s)://unimus.server.address:(port)>"
+TOKEN="<api token>"
 HEADERS_ACCEPT="Accept: application/json"
 HEADERS_CONTENT_TYPE="Content-type: application/json"
 HEADERS_AUTHORIZATION="Authorization: Bearer $TOKEN"
 #ftp root directory
-FTP_FOLDER="/home/will/docker-composer/ftp_data/"
+FTP_FOLDER="/home/user/ftp_data/"
 
 # Optional parameters
 # Specifies the Zone where devices will be searched for by address/hostname
 # CASE SENSITIVE; leave commented to use the Default (0) zone
-ZONE="ESS1"
+ZONE="ES1"
 # Insecure mode
 # If you are using self-signed certificates you might want to uncomment this
 #SELF_SIGNED_CERT=true
@@ -48,8 +48,8 @@ function process_files() {
             if [ -d "$subdir" ]; then
                 # Interpret directory names as device addresses/host names in Unimus
                 address=$(basename "$subdir")
+                # Check if device already exists in Unimus
                 id=$(getDeviceId "$address")
-                # Add device to Unimus if it was not found and creating devices is enabled
                 [ $id = "null" ] && [ -n "$CREATE_DEVICES" ] && createNewDevice "$address" && id=$(getDeviceId "$address") && echoGreen "New device added. Address:$address, id:$id"
                 if [ $id = "null" ] || [ -z "$id" ]; then
                     echoYellow "Device $address not found on Unimus. Consider enabling creating devices. Continuing with next device."
@@ -72,8 +72,8 @@ function process_files() {
 EOF
                             # Use jq to process the JSON from the temporary file
                             jq '.' "$temp_json_file" > output.json
-                            createBackup "$id" "output.json" && echoGreen "Pushed $bkp_type backup for device $address from file $file" && rm "$subdir/$file"
-                            sleep 1
+                            createBackup "$id" "output.json" && echoGreen "Pushed $bkp_type backup for device $address from file $file" #&& rm "$subdir/$file"
+                            wait
                             # Clean up the temporary files
                             rm "$temp_json_file" output.json
                         fi
@@ -83,7 +83,7 @@ EOF
         done
     else
         if [ -z $status ]; then
-            echoRed 'Unable to connect to unimus server'\
+            echoRed 'Unable to connect to unimus server'
             exit 2
         else
             echoRed "Unimus server status: $status"
@@ -93,7 +93,7 @@ EOF
 }
 
 function healthCheck() {
-    local response=$(curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v2/health")
+    local response=$(curl $insecure -X GET -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v2/health")
     local status=$(jq -r '.data.status' <<< $response)
     echo "$status"
 }
@@ -106,7 +106,7 @@ function errorCheck() {
 }
 
 function zoneCheck() {
-    local response=$(curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v3/zones")
+    local response=$(curl $insecure -X GET -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v3/zones")
     local zoneIDs=$(jq -r '.zones[].number' <<< $response)
     for ID in $zoneIDs; do
         [ $ID = $ZONE ] && local zoneFound=1
@@ -137,24 +137,24 @@ function echoRed() {
 
 function getDeviceId() {
     if [ -z "$ZONE" ]; then
-        echo "$(curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$1" | jq .data.id)"
+        echo "$(curl $insecure -X GET -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$1" | jq .data.id)"
     else
-        echo "$(curl $insecure -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$1?zoneId=$ZONE" | jq .data.id)"
+        echo "$(curl $insecure -X GET -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_AUTHORIZATION" "$UNIMUS_ADDRESS/api/v2/devices/findByAddress/$1?zoneId=$ZONE" | jq .data.id)"
     fi
 }
 
 function createNewDevice() {
     if [ -z "$ZONE" ]; then
-        curl $insecure  -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"address": "'"$1"'","description":"'"$CREATED_DESC"'"}'\
+        curl $insecure -X POST -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"address": "'"$1"'","description":"'"$CREATED_DESC"'"}'\
         "$UNIMUS_ADDRESS/api/v2/devices" > /dev/null
     else
-        curl $insecure  -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"address": "'"$1"'","description":"'"$CREATED_DESC"'", "zoneId": "'"$ZONE"'"}'\
+        curl $insecure -X POST -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d '{"address": "'"$1"'","description":"'"$CREATED_DESC"'", "zoneId": "'"$ZONE"'"}'\
         "$UNIMUS_ADDRESS/api/v2/devices" > /dev/null
     fi
 }
 
 function createBackup() {
-    curl $insecure -X POST -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d "@$2"  "$UNIMUS_ADDRESS/api/v2/devices/$1/backups"
+    curl $insecure -X POST -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d "@$2"  "$UNIMUS_ADDRESS/api/v2/devices/$1/backups" > /dev/null
 }
 
 process_files $FTP_FOLDER
