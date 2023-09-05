@@ -4,8 +4,6 @@
 # Mandatory parameters
 UNIMUS_ADDRESS="<http(s)://unimus.server.address:(port)>"
 TOKEN="<api token>"
-HEADERS_ACCEPT="Accept: application/json"
-HEADERS_CONTENT_TYPE="Content-type: application/json"
 HEADERS_AUTHORIZATION="Authorization: Bearer $TOKEN"
 #ftp root directory
 FTP_FOLDER="/home/user/ftp_data/"
@@ -18,11 +16,15 @@ ZONE="ES1"
 # If you are using self-signed certificates you might want to uncomment this
 #SELF_SIGNED_CERT=true
 # Variable for enabling creation of new devices in Unimus; comment to disable
-CREATE_DEVICES=true
+#CREATE_DEVICES=true
 # Specify description of new devices created in Unimus by the script
 CREATED_DESC="The Unbackupable"
 
-function process_files() {
+# Headers used by Unimus APIs
+HEADERS_ACCEPT="Accept: application/json"
+HEADERS_CONTENT_TYPE="Content-type: application/json"
+
+function processFiles() {
 
     # Set script directory for the script
     script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
@@ -157,4 +159,4 @@ function createBackup() {
     curl $insecure -X POST -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d "@$2"  "$UNIMUS_ADDRESS/api/v2/devices/$1/backups" > /dev/null
 }
 
-process_files $FTP_FOLDER
+processFiles $FTP_FOLDER

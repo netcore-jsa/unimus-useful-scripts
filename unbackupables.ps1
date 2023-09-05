@@ -4,6 +4,7 @@
 $UNIMUS_ADDRESS = "<http(s)://unimus.server.address:(port)>"
 $TOKEN = "<api token>"
 $FTP_FOLDER = "/ftp_data"
+# Example of Windows file format with backslashes
 #C:\Users\unimus\Documents\ftp_data\
 
 # Optional parameters
