@@ -1,31 +1,30 @@
 #!/bin/bash
 # This script is for pushing config backups from local directory to Unimus
-# !!! The script works for Unimus v2.4.0 beta 3 onwards !!!
+# !!! The script works for Unimus 2.4.0-Beta3 onwards !!!
 # Mandatory parameters
 UNIMUS_ADDRESS="<http(s)://unimus.server.address:(port)>"
 TOKEN="<api token>"
-HEADERS_AUTHORIZATION="Authorization: Bearer $TOKEN"
-#ftp root directory
+# FTP root directory
 FTP_FOLDER="/home/user/ftp_data/"
 
 # Optional parameters
 # Specifies the Zone where devices will be searched for by address/hostname
 # CASE SENSITIVE; leave commented to use the Default (0) zone
-ZONE="ES1"
+#ZONE="0"
 # Insecure mode
-# If you are using self-signed certificates you might want to uncomment this
-#SELF_SIGNED_CERT=true
-# Variable for enabling creation of new devices in Unimus; comment to disable
-#CREATE_DEVICES=true
+# If you are using self-signed certificates you might want to set this to true
+SELF_SIGNED_CERT=false
+# Variable for enabling creation of new devices in Unimus; set to true to enable
+CREATE_DEVICES=true
 # Specify description of new devices created in Unimus by the script
 CREATED_DESC="The Unbackupable"
 
 # Headers used by Unimus APIs
 HEADERS_ACCEPT="Accept: application/json"
 HEADERS_CONTENT_TYPE="Content-type: application/json"
+HEADERS_AUTHORIZATION="Authorization: Bearer $TOKEN"
 
 function processFiles() {
-
     # Set script directory for the script
     script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
 
@@ -35,7 +34,9 @@ function processFiles() {
     date +"%F %H:%M:%S" >> $log
 
     # Insecure curl switch
-    [ -n "$SELF_SIGNED_CERT" ] && insecure="-k"
+    if $SELF_SIGNED_CERT; then
+        insecure="-k"
+    fi
 
     # Perform Unimus health check
     status=$(healthCheck)
@@ -52,7 +53,11 @@ function processFiles() {
                 address=$(basename "$subdir")
                 # Check if device already exists in Unimus
                 id=$(getDeviceId "$address")
-                [ $id = "null" ] && [ -n "$CREATE_DEVICES" ] && createNewDevice "$address" && id=$(getDeviceId "$address") && echoGreen "New device added. Address:$address, id:$id"
+                if [ $id = "null" ]; then
+                    if $CREATE_DEVICES; then
+                        createNewDevice "$address" && id=$(getDeviceId "$address") && echoGreen "New device added. Address: $address, id: $id"
+                    fi
+                fi
                 if [ $id = "null" ] || [ -z "$id" ]; then
                     echoYellow "Device $address not found on Unimus. Consider enabling creating devices. Continuing with next device."
                 else
@@ -66,7 +71,8 @@ function processFiles() {
                             fi
                             encoded_backup=$(base64 -w 0 "$subdir/$file")
                             temp_json_file=$(mktemp)
-                            cat <<EOF > "$temp_json_file"
+
+                            cat <<-EOF > "$temp_json_file"
                             {
                             "backup": "$encoded_backup",
                             "type": "$bkp_type"
@@ -74,10 +80,9 @@ function processFiles() {
 EOF
                             # Use jq to process the JSON from the temporary file
                             jq '.' "$temp_json_file" > output.json
-                            createBackup "$id" "output.json" && echoGreen "Pushed $bkp_type backup for device $address from file $file" #&& rm "$subdir/$file"
-                            wait
+                            createBackup "$id" "output.json" && echoGreen "Pushed $bkp_type backup for device $address from file $file"
                             # Clean up the temporary files
-                            rm "$temp_json_file" output.json
+                            rm "$temp_json_file" output.json #"$subdir/$file"
                         fi
                     done
                 fi
@@ -156,7 +161,7 @@ function createNewDevice() {
 }
 
 function createBackup() {
-    curl $insecure -X POST -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d "@$2"  "$UNIMUS_ADDRESS/api/v2/devices/$1/backups" > /dev/null
+    curl $insecure -X POST -sSL -H "$HEADERS_ACCEPT" -H "$HEADERS_CONTENT_TYPE" -H "$HEADERS_AUTHORIZATION" -d "@$2" "$UNIMUS_ADDRESS/api/v2/devices/$1/backups" > /dev/null
 }
 
 processFiles $FTP_FOLDER

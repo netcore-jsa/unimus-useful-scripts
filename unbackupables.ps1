@@ -1,8 +1,9 @@
 # This script is for pushing config backups from local directory to Unimus
-# !!! The script works for Unimus v2.4.0 beta 3 onwards !!!
+# !!! The script works for Unimus 2.4.0-Beta3 onwards !!!
 # Mandatory parameters
 $UNIMUS_ADDRESS = "<http(s)://unimus.server.address:(port)>"
 $TOKEN = "<api token>"
+# FTP root directory
 $FTP_FOLDER = "/ftp_data"
 # Example of Windows file format with backslashes
 #C:\Users\unimus\Documents\ftp_data\
@@ -10,14 +11,14 @@ $FTP_FOLDER = "/ftp_data"
 # Optional parameters
 # Specifies the Zone where devices will be searched for by address/hostname
 # CASE SENSITIVE; leave commented to use the Default (0) zone
-$ZONE="ES1"
+#$ZONE="0"
 # Insecure mode
-# If you are using self-signed certificates you might want to uncomment this
-$INSECURE = $true
-# Variable for enabling creation of new devices in Unimus; comment to disable
+# If you are using self-signed certificates you might want to set this to true
+$INSECURE = $false
+# Variable for enabling creation of new devices in Unimus; set to true to enable
 $CREATE_DEVICES = $true
 # Specify description of new devices created in Unimus by the script
-$CREATED_DESC = "Unbackupable"
+$CREATED_DESC = "UnbackupablePS"
 
 function Process-Files {
     param(
@@ -38,11 +39,12 @@ function Process-Files {
 
         Print-Green "Checks OK. Script starting..."
         $ftpSubdirs = Get-ChildItem -Path $directory -Directory
+
         foreach ($subdir in $ftpSubdirs) {
             $address = $subdir.Name
             # Check if device already exists in Unimus
             $id = "null"; $id = Get-DeviceId $address
-            Write-Host "THis is ID:" + $id + ". OK."
+
             if ($id -eq "null" -and $CREATE_DEVICES) {
                 Create-NewDevice $address
                 $id = Get-DeviceId $address
@@ -51,9 +53,9 @@ function Process-Files {
 
             if ($id -eq "null" -or $id -eq $null) {
                 Print-Yellow ("Device " + $address + " not found on Unimus. Consider enabling creating devices. Continuing with next device.")
-
             } else {
                 $files = Get-ChildItem -Path $subdir.FullName | Sort-Object -Property LastWriteTime -Descending
+
                 foreach ($file in $files) {
 
                     if ($file.GetType() -eq [System.IO.FileInfo]) {
@@ -61,24 +63,21 @@ function Process-Files {
                         $content = Get-Content -Path $file.FullName -Raw
 
                         if ($content -match "[^\x00-\x7F]") {
-                            Create-Backup $id $encodedBackup "BINARY"
-                            Print-Green ("Pushed BINARY backup for device " + $address + " from file " + $($file.Name))
-                            Remove-Item $file.FullName
-
+                            $bkp_type = "BINARY"
                         } else {
-                            Create-Backup $id $encodedBackup "TEXT"
-                            Print-Green ("Pushed TEXT backup for device " + $address + " from file " + $($file.Name))
-                            Remove-Item $file.FullName
+                            $bkp_type = "TEXT"
                         }
+                        Create-Backup $id $encodedBackup $bkp_type
+                        Print-Green ("Pushed " + $bkp_type + " backup for device " + $address + " from file " + $($file.Name))
+                        Remove-Item $file.FullName
                     }
                 }
             }
         }
-
     } else {
         Print-Red "Unimus server status: $status"
     }
-    Print-Green "Script finished."
+        Print-Green "Script finished."
 }
 
 function Health-Check {
@@ -122,7 +121,7 @@ function Zone-Check {
     }
 
     if (-not $zoneFound) {
-        Print-Red "Error. Zone $ZONE not found!" -ForegroundColor Red
+        Print-Red "Error. Zone $ZONE not found!"
         exit
     }
 }
@@ -245,8 +244,8 @@ function Create-Backup {
 
 $psMajorVersion = $PSVersionTable.PSVersion.Major
 
+# This block handles insecure API calls for earlier PS versions
 if ($INSECURE -and $psMajorVersion -le 5) {
-    Print-Green "Skipping certificate validation using a custom class (for PS versions below 5 and included)"
     Add-Type @"
     using System.Net;
     using System.Security.Cryptography.X509Certificates;
@@ -260,7 +259,7 @@ if ($INSECURE -and $psMajorVersion -le 5) {
 "@
     [System.Net.ServicePointManager]::CertificatePolicy = New-Object TrustAllCertsPolicy
 
-    # Set Tls versions
+    # Set TLS versions
     $allProtocols = [System.Net.SecurityProtocolType]'Ssl3,Tls,Tls11,Tls12'
     [System.Net.ServicePointManager]::SecurityProtocol = $allProtocols
 }
