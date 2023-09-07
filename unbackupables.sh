@@ -1,6 +1,6 @@
 #!/bin/bash
 # This script is for pushing config backups from local directory to Unimus
-# !!! The script works for Unimus 2.4.0-Beta3 onwards !!!
+# !!! Specifying Zone to search in works for Unimus 2.4.0-Beta3 onwards !!!
 # Mandatory parameters
 UNIMUS_ADDRESS="<http(s)://unimus.server.address:(port)>"
 TOKEN="<api token>"
@@ -15,7 +15,7 @@ FTP_FOLDER="/home/user/ftp_data/"
 # If you are using self-signed certificates you might want to set this to true
 SELF_SIGNED_CERT=false
 # Variable for enabling creation of new devices in Unimus; set to true to enable
-CREATE_DEVICES=true
+CREATE_DEVICES=false
 # Specify description of new devices created in Unimus by the script
 CREATED_DESC="The Unbackupable"
 
@@ -61,7 +61,7 @@ function processFiles() {
                 if [ $id = "null" ] || [ -z "$id" ]; then
                     echoYellow "Device $address not found on Unimus. Consider enabling creating devices. Continuing with next device."
                 else
-                    for file in $(ls -tr "$subdir"); do
+                    for file in $(ls -t "$subdir"); do
                         if [ -f "$subdir/$file" ]; then
                             isTextFile=$(file -b "$subdir/$file")
                             if [[ $isTextFile == *"text"* ]]; then
@@ -81,8 +81,8 @@ EOF
                             # Use jq to process the JSON from the temporary file
                             jq '.' "$temp_json_file" > output.json
                             createBackup "$id" "output.json" && echoGreen "Pushed $bkp_type backup for device $address from file $file"
-                            # Clean up the temporary files
-                            rm "$temp_json_file" output.json #"$subdir/$file"
+                            # Clean up the temporary files & backup file
+                            rm "$temp_json_file" output.json "$subdir/$file"
                         fi
                     done
                 fi

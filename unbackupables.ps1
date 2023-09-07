@@ -1,5 +1,5 @@
 # This script is for pushing config backups from local directory to Unimus
-# !!! The script works for Unimus 2.4.0-Beta3 onwards !!!
+# !!! Specifying Zone to search in works for Unimus 2.4.0-Beta3 onwards !!!
 # Mandatory parameters
 $UNIMUS_ADDRESS = "<http(s)://unimus.server.address:(port)>"
 $TOKEN = "<api token>"
@@ -16,7 +16,7 @@ $FTP_FOLDER = "/ftp_data"
 # If you are using self-signed certificates you might want to set this to true
 $INSECURE = $false
 # Variable for enabling creation of new devices in Unimus; set to true to enable
-$CREATE_DEVICES = $true
+$CREATE_DEVICES = $false
 # Specify description of new devices created in Unimus by the script
 $CREATED_DESC = "UnbackupablePS"
 
