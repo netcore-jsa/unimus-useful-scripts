@@ -1,7 +1,7 @@
 # This script is for pushing config backups from local directory to Unimus
 # !!! Specifying Zone to search in works for Unimus 2.4.0-Beta3 onwards !!!
 # Mandatory parameters
-$UNIMUS_ADDRESS = "<http(s)://unimus.server.address:(port)>"
+$UNIMUS_ADDRESS = "<http(s)://unimus.server.address(:port)>"
 $TOKEN = "<api token>"
 # FTP root directory
 $FTP_FOLDER = "/ftp_data"
@@ -18,7 +18,7 @@ $INSECURE = $false
 # Variable for enabling creation of new devices in Unimus; set to true to enable
 $CREATE_DEVICES = $false
 # Specify description of new devices created in Unimus by the script
-$CREATED_DESC = "UnbackupablePS"
+$CREATED_DESC = "Unbackupable"
 
 function Process-Files {
     param(
@@ -32,7 +32,6 @@ function Process-Files {
     $status = Health-Check
 
     if ($status -eq 'OK') {
-
         if ($ZONE) {
             Zone-Check
         }
@@ -57,12 +56,11 @@ function Process-Files {
                 $files = Get-ChildItem -Path $subdir.FullName | Sort-Object -Property LastWriteTime -Descending
 
                 foreach ($file in $files) {
-
                     if ($file.GetType() -eq [System.IO.FileInfo]) {
-                        $encodedBackup = [System.Convert]::ToBase64String([System.IO.File]::ReadAllBytes($file.Fullname))
-                        $content = Get-Content -Path $file.FullName -Raw
+                        $content = [System.IO.File]::ReadAllBytes($file.Fullname)
+                        $encodedBackup = [System.Convert]::ToBase64String($content)
 
-                        if ($content -match "[^\x00-\x7F]") {
+                        if ($content -contains 0) {
                             $bkp_type = "BINARY"
                         } else {
                             $bkp_type = "TEXT"
@@ -77,7 +75,7 @@ function Process-Files {
     } else {
         Print-Red "Unimus server status: $status"
     }
-        Print-Green "Script finished."
+    Print-Green "Script finished."
 }
 
 function Health-Check {

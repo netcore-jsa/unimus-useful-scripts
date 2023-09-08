@@ -2,7 +2,7 @@
 # This script is for pushing config backups from local directory to Unimus
 # !!! Specifying Zone to search in works for Unimus 2.4.0-Beta3 onwards !!!
 # Mandatory parameters
-UNIMUS_ADDRESS="<http(s)://unimus.server.address:(port)>"
+UNIMUS_ADDRESS="<http(s)://unimus.server.address(:port)>"
 TOKEN="<api token>"
 # FTP root directory
 FTP_FOLDER="/home/user/ftp_data/"
@@ -27,6 +27,7 @@ HEADERS_AUTHORIZATION="Authorization: Bearer $TOKEN"
 function processFiles() {
     # Set script directory for the script
     script_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd -P)
+    cd $script_dir
 
     # Creating a log file
     log="$script_dir/unbackupables.log"
