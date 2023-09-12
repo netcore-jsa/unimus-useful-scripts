@@ -5,6 +5,7 @@ Repo contains useful Unimus scripts.
 - this script is creating config backups in Unimus via API from files found under specified directory
 - intended use is to push config backups to Unimus from an FTP for devices without CLI
 - available in linux shell and powershell versions
+- full article describing the topic is available on our blog at https://blog.unimus.net/backing-up-the-unbackupable/
 
 Mandatory parameters:
 User needs to change Unimus hostname/IP, API token and root directory to reflect their environment.
