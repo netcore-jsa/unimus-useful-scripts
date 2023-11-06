@@ -1,0 +1,20 @@
+SELECT
+  d.id,
+  d.vendor,
+  d.type,
+  d.model,
+  CONVERT(varchar, DATEADD(SECOND, dhj.create_time, '19700101'), 108) + ' ' + CONVERT(varchar, DATEADD(SECOND, dhj.create_time, '19700101'), 104) AS Time,
+  z.name,
+  dhj.job_type,
+  REPLACE(dhj.error_log, CHAR(13) + CHAR(10), ' ') AS error_log
+FROM device d
+LEFT JOIN (
+  SELECT TOP 1 id, create_time, job_type, error_log, device_id
+  FROM device_history_job
+  WHERE device_id = d.id
+    AND job_type = 'BACKUP'
+  ORDER BY create_time DESC
+) AS dhj ON 1 = 1
+LEFT JOIN zone z ON z.id = d.zone_id
+WHERE dhj.successful = 0
+  AND dhj.create_time > DATEDIFF(SECOND, '19700101', GETDATE()) - 7
