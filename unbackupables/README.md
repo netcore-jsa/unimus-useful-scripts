@@ -1,6 +1,3 @@
-# unimus-useful-scripts
-Repo contains useful Unimus scripts.
-
 **Unbackupables (.sh,.ps1)**
 - this script is creating config backups in Unimus via API from files found under specified directory
 - intended use is to push config backups to Unimus from an FTP for devices without CLI
