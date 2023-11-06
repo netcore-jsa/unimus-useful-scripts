@@ -1,0 +1,19 @@
+SELECT
+   d.id,
+   dhj.info,
+   z.name,
+   TO_CHAR(TO_TIMESTAMP(dhj.create_time), 'HH24:MI:SS DD.MM.YYYY') AS Time,
+   dhj.job_type,
+   REPLACE(dhj.error_log, E'\r\n', ' ') AS error_log
+FROM device d
+LEFT JOIN LATERAL (
+   SELECT id, info, job_type, error_log, successful, create_time
+   FROM device_history_job dhj
+   WHERE d.id = device_id
+     AND dhj.job_type = 'DISCOVERY'
+   ORDER BY create_time DESC
+   LIMIT 1
+) dhj ON true
+LEFT JOIN zone z ON z.id = d.zone_id
+WHERE dhj.successful = FALSE
+  AND dhj.create_time > EXTRACT(EPOCH FROM (CURRENT_DATE - INTERVAL '7' DAY));
