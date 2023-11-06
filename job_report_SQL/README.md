@@ -1,7 +1,7 @@
 # job-report-sql
 DB queries for generating Unimus job report exports
 
-Contains examples of MySQL (MariaDB) and PostgreSQL queries for:
+Contains examples of MySQL (MariaDB), PostgreSQL and MSSQL queries for:
 - fetching last Discovery jobs in last week that failed
 - fetching last Backup jobs in last week that failed
 
