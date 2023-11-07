@@ -7,3 +7,5 @@ Contains examples of MySQL (MariaDB), PostgreSQL and MSSQL queries for:
 
 To use the shell scripts, adjust DB address, name and user according to your environment.
 To adjust the period over which to search, modify the number of days in the last line of the query.
+
+A blog article about this topic can be found at https://blog.unimus.net/generating-reports-from-unimus-job-failures/.
